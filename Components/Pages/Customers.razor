@@ -1,0 +1,218 @@
+﻿@page "/customers"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div class="inventory-container">
+    <div class="inventory-header">
+        <div>
+            <h3 class="inventory-title">Customer List</h3>
+            <p style="color:#718096; margin:0; font-size:0.9rem;">Manage your email marketing subscribers</p>
+        </div>
+        @if (isAdmin)
+        {
+            <button class="btn-primary" @onclick="ShowForm">+ Add Customer</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="auth-success">@successMessage</div>
+    }
+
+    @if (showForm)
+    {
+        <div class="form-card">
+            <h5 class="form-title">@(editingCustomer == null ? "Add New Customer" : "Edit Customer")</h5>
+            @if (!string.IsNullOrEmpty(validationMessage))
+            {
+                <p class="validation-error">@validationMessage</p>
+            }
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input placeholder="e.g. Jane Smith" @bind="formCustomer.Name" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" placeholder="e.g. jane@email.com" @bind="formCustomer.Email" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input placeholder="e.g. 555-0100" @bind="formCustomer.Phone" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Subscribed</label>
+                    <select @bind="formCustomer.IsSubscribed" class="form-input">
+                        <option value="true">Yes - subscribed</option>
+                        <option value="false">No - unsubscribed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="SaveCustomer">Save Customer</button>
+                <button class="btn-secondary" @onclick="CancelForm">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <div style="display:flex; gap:12px; margin-bottom:1rem; font-size:0.9rem;">
+        <span style="background:#e0e7ff; color:#4338ca; padding:4px 12px; border-radius:20px;">
+            Total: @customers.Count
+        </span>
+        <span style="background:#dcfce7; color:#166534; padding:4px 12px; border-radius:20px;">
+            Subscribed: @customers.Count(c => c.IsSubscribed)
+        </span>
+        <span style="background:#fee2e2; color:#991b1b; padding:4px 12px; border-radius:20px;">
+            Unsubscribed: @customers.Count(c => !c.IsSubscribed)
+        </span>
+    </div>
+
+    <div class="table-card">
+        <table class="inventory-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Added</th>
+                    @if (isAdmin)
+                    {
+                        <th>Actions</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var customer in customers)
+                {
+                    <tr>
+                        <td class="td-name">@customer.Name</td>
+                        <td style="color:#4f46e5">@customer.Email</td>
+                        <td>@customer.Phone</td>
+                        <td>
+                            @if (customer.IsSubscribed)
+                            {
+                                <span class="status-badge status-low" style="background:#dcfce7; color:#166534;">Subscribed</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge status-out">Unsubscribed</span>
+                            }
+                        </td>
+                        <td style="color:#718096; font-size:0.85rem;">@customer.CreatedAt.ToString("MMM dd, yyyy")</td>
+                        @if (isAdmin)
+                        {
+                            <td class="td-actions">
+                                <button class="btn-edit" @onclick="() => StartEdit(customer)">Edit</button>
+                                <button class="btn-delete" @onclick="() => DeleteCustomer(customer.Id)">Delete</button>
+                            </td>
+                        }
+                    </tr>
+                }
+                @if (!customers.Any())
+                {
+                    <tr>
+                        <td colspan="6" class="empty-state">No customers yet. Add your first customer!</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    bool isAdmin = false;
+    List<Customer> customers = new();
+    Customer formCustomer = new();
+    Customer? editingCustomer = null;
+    bool showForm = false;
+    string validationMessage = "";
+    string successMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        isAdmin = authState.User.IsInRole("Admin");
+        await LoadCustomers();
+    }
+
+    async Task LoadCustomers()
+    {
+        using var db = DbFactory.CreateDbContext();
+        customers = await db.Customers.OrderByDescending(c => c.CreatedAt).ToListAsync();
+    }
+
+    void ShowForm()
+    {
+        editingCustomer = null;
+        formCustomer = new();
+        validationMessage = "";
+        showForm = true;
+    }
+
+    void StartEdit(Customer customer)
+    {
+        editingCustomer = customer;
+        formCustomer = new Customer
+        {
+            Id = customer.Id,
+            Name = customer.Name,
+            Email = customer.Email,
+            Phone = customer.Phone,
+            IsSubscribed = customer.IsSubscribed,
+            CreatedAt = customer.CreatedAt
+        };
+        validationMessage = "";
+        showForm = true;
+    }
+
+    void CancelForm()
+    {
+        showForm = false;
+        editingCustomer = null;
+        formCustomer = new();
+        validationMessage = "";
+    }
+
+    async Task SaveCustomer()
+    {
+        if (string.IsNullOrWhiteSpace(formCustomer.Name))
+        {
+            validationMessage = "Name is required.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(formCustomer.Email))
+        {
+            validationMessage = "Email is required.";
+            return;
+        }
+
+        using var db = DbFactory.CreateDbContext();
+        if (editingCustomer == null)
+            db.Customers.Add(formCustomer);
+        else
+            db.Customers.Update(formCustomer);
+
+        await db.SaveChangesAsync();
+        successMessage = "Customer saved successfully!";
+        CancelForm();
+        await LoadCustomers();
+    }
+
+    async Task DeleteCustomer(int id)
+    {
+        using var db = DbFactory.CreateDbContext();
+        var customer = await db.Customers.FindAsync(id);
+        if (customer != null)
+        {
+            db.Customers.Remove(customer);
+            await db.SaveChangesAsync();
+        }
+        successMessage = "Customer deleted.";
+        await LoadCustomers();
+    }
+}

@@ -1,0 +1,246 @@
+﻿@page "/campaigns"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject EmailService EmailService
+
+<div class="inventory-container">
+    <div class="inventory-header">
+        <div>
+            <h3 class="inventory-title">Email Campaigns</h3>
+            <p style="color:#718096; margin:0; font-size:0.9rem;">Send promotional emails to your customers</p>
+        </div>
+        <button class="btn-primary" @onclick="ShowForm">+ New Campaign</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="auth-success">@successMessage</div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="validation-error">@errorMessage</div>
+    }
+
+    @if (isSending)
+    {
+        <div style="background:#e0e7ff; border:1px solid #4f46e5; color:#3730a3; padding:12px 16px; border-radius:8px; margin-bottom:1rem;">
+            Sending emails... please wait
+        </div>
+    }
+
+    @if (showForm)
+    {
+        <div class="form-card">
+            <h5 class="form-title">Create New Campaign</h5>
+            @if (!string.IsNullOrEmpty(validationMessage))
+            {
+                <p class="validation-error">@validationMessage</p>
+            }
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Campaign Title (internal)</label>
+                    <input placeholder="e.g. Summer Sale 2026" @bind="formCampaign.Title" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Campaign Type</label>
+                    <select @bind="formCampaign.Type" class="form-input">
+                        <option value="Announcement">Announcement</option>
+                        <option value="Discount">Discount</option>
+                        <option value="Coupon">Coupon</option>
+                    </select>
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Email Subject (what customers see)</label>
+                    <input placeholder="e.g. 20% Off Everything This Weekend!" @bind="formCampaign.Subject" class="form-input" />
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+                <label>Email Body</label>
+                <textarea @bind="formCampaign.Body" class="form-input" rows="6"
+                          style="resize:vertical; min-height:150px;"
+                          placeholder="Write your email message here..."></textarea>
+            </div>
+            <div style="background:#f8fafc; border-radius:8px; padding:1rem; margin-top:1rem; font-size:0.85rem; color:#718096;">
+                <strong>Recipients:</strong> @subscribedCount subscribed customers will receive this email
+            </div>
+            <div class="form-actions" style="margin-top:1rem;">
+                <button class="btn-primary" @onclick="SendCampaign" disabled="@isSending">
+                    Send to @subscribedCount customers
+                </button>
+                <button class="btn-secondary" @onclick="CancelForm">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <div class="table-card">
+        <table class="inventory-table">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Type</th>
+                    <th>Subject</th>
+                    <th>Recipients</th>
+                    <th>Sent</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var campaign in campaigns)
+                {
+                    <tr>
+                        <td class="td-name">@campaign.Title</td>
+                        <td><span class="category-badge">@campaign.Type</span></td>
+                        <td style="color:#4a5568; font-size:0.85rem;">@campaign.Subject</td>
+                        <td style="font-weight:600;">@campaign.RecipientCount</td>
+                        <td style="color:#718096; font-size:0.85rem;">
+                            @(campaign.IsSent? campaign.SentAt.ToString("MMM dd, yyyy h:mm tt") : "—")
+                        </td>
+                        <td>
+                            @if (campaign.IsSent)
+                            {
+                                <span class="status-badge" style="background:#dcfce7; color:#166534;">Sent</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge status-low">Draft</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if (!campaigns.Any())
+                {
+                    <tr>
+                        <td colspan="6" class="empty-state">No campaigns yet. Create your first campaign!</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    List<EmailCampaign> campaigns = new();
+    List<Customer> subscribedCustomers = new();
+    EmailCampaign formCampaign = new();
+    bool showForm = false;
+    bool isSending = false;
+    string validationMessage = "";
+    string successMessage = "";
+    string errorMessage = "";
+    int subscribedCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    async Task LoadData()
+    {
+        using var db = DbFactory.CreateDbContext();
+        campaigns = await db.EmailCampaigns
+            .OrderByDescending(c => c.SentAt)
+            .ToListAsync();
+        subscribedCustomers = await db.Customers
+            .Where(c => c.IsSubscribed)
+            .ToListAsync();
+        subscribedCount = subscribedCustomers.Count;
+    }
+
+    void ShowForm()
+    {
+        formCampaign = new();
+        validationMessage = "";
+        successMessage = "";
+        errorMessage = "";
+        showForm = true;
+    }
+
+    void CancelForm()
+    {
+        showForm = false;
+        formCampaign = new();
+        validationMessage = "";
+    }
+
+    async Task SendCampaign()
+    {
+        if (string.IsNullOrWhiteSpace(formCampaign.Title))
+        {
+            validationMessage = "Campaign title is required.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(formCampaign.Subject))
+        {
+            validationMessage = "Email subject is required.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(formCampaign.Body))
+        {
+            validationMessage = "Email body is required.";
+            return;
+        }
+        if (!subscribedCustomers.Any())
+        {
+            validationMessage = "No subscribed customers to send to!";
+            return;
+        }
+
+        isSending = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            var recipients = subscribedCustomers
+                .Select(c => (c.Email, c.Name))
+                .ToList();
+
+            var htmlBody = "<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;'>" +
+                "<div style='background:#4f46e5;padding:20px;text-align:center;'>" +
+                "<h1 style='color:white;margin:0;'>imsystem</h1>" +
+                "</div>" +
+                "<div style='padding:30px;background:#ffffff;'>" +
+                "<h2 style='color:#2d3748;'>" + formCampaign.Subject + "</h2>" +
+                "<div style='color:#4a5568;line-height:1.6;'>" +
+                formCampaign.Body.Replace("\n", "<br/>") +
+                "</div>" +
+                "</div>" +
+                "<div style='background:#f7fafc;padding:20px;text-align:center;font-size:12px;color:#718096;'>" +
+                "You received this email because you are subscribed to our mailing list." +
+                "</div>" +
+                "</div>";
+
+            int sent = await EmailService.SendBulkEmailAsync(recipients, formCampaign.Subject, htmlBody);
+
+            using var db = DbFactory.CreateDbContext();
+            var campaign = new EmailCampaign
+            {
+                Title = formCampaign.Title,
+                Subject = formCampaign.Subject,
+                Body = formCampaign.Body,
+                Type = formCampaign.Type,
+                SentAt = DateTime.Now,
+                RecipientCount = sent,
+                IsSent = true
+            };
+            db.EmailCampaigns.Add(campaign);
+            await db.SaveChangesAsync();
+
+            successMessage = "Campaign sent successfully to " + sent + " customers!";
+            CancelForm();
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error sending campaign: " + ex.Message;
+        }
+        finally
+        {
+            isSending = false;
+            StateHasChanged();
+        }
+    }
+}

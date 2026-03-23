@@ -1,0 +1,297 @@
+﻿@page "/scheduler"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div class="inventory-container">
+    <div class="inventory-header">
+        <div>
+            <h3 class="inventory-title">Task Scheduler</h3>
+            <p style="color:#718096; margin:0; font-size:0.9rem;">Manage and track your tasks</p>
+        </div>
+        <button class="btn-primary" @onclick="ShowForm">+ Add Task</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="auth-success">✓ @successMessage</div>
+    }
+
+    <div style="display:flex; gap:12px; margin-bottom:1rem; flex-wrap:wrap;">
+        <span style="background:#e0e7ff; color:#4338ca; padding:4px 12px; border-radius:20px; font-size:0.85rem;">
+            Total: @tasks.Count
+        </span>
+        <span style="background:#fef9c3; color:#854d0e; padding:4px 12px; border-radius:20px; font-size:0.85rem;">
+            Pending: @tasks.Count(t => t.Status == "Pending")
+        </span>
+        <span style="background:#dbeafe; color:#1e40af; padding:4px 12px; border-radius:20px; font-size:0.85rem;">
+            In Progress: @tasks.Count(t => t.Status == "In Progress")
+        </span>
+        <span style="background:#dcfce7; color:#166534; padding:4px 12px; border-radius:20px; font-size:0.85rem;">
+            Completed: @tasks.Count(t => t.Status == "Completed")
+        </span>
+        <span style="background:#fee2e2; color:#991b1b; padding:4px 12px; border-radius:20px; font-size:0.85rem;">
+            Overdue: @tasks.Count(t => t.DueDate < DateTime.Now && t.Status != "Completed")
+        </span>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-bottom:1rem; flex-wrap:wrap;">
+        <select @onchange="FilterChanged" class="form-input" style="width:160px; height:36px;">
+            <option value="">All statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+        </select>
+        <select @onchange="PriorityFilterChanged" class="form-input" style="width:160px; height:36px;">
+            <option value="">All priorities</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+        </select>
+    </div>
+
+    @if (showForm)
+    {
+        <div class="form-card">
+            <h5 class="form-title">@(editingTask == null ? "Add New Task" : "Edit Task")</h5>
+            @if (!string.IsNullOrEmpty(validationMessage))
+            {
+                <p class="validation-error">⚠ @validationMessage</p>
+            }
+            <div class="form-grid">
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Task Title</label>
+                    <input placeholder="e.g. Reorder swimwear stock" @bind="formTask.Title" class="form-input" />
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Description</label>
+                    <input placeholder="e.g. Contact supplier ABC for reorder" @bind="formTask.Description" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Due Date</label>
+                    <input type="date" @bind="formTask.DueDate" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <select @bind="formTask.Priority" class="form-input">
+                        <option value="High">🔴 High</option>
+                        <option value="Medium">🟡 Medium</option>
+                        <option value="Low">🟢 Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select @bind="formTask.Status" class="form-input">
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="SaveTask">Save Task</button>
+                <button class="btn-secondary" @onclick="CancelForm">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <div class="table-card">
+        <table class="inventory-table">
+            <thead>
+                <tr>
+                    <th>Task</th>
+                    <th>Description</th>
+                    <th>Due Date</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var task in FilteredTasks)
+                {
+                    <tr class="@(task.DueDate < DateTime.Now && task.Status != "Completed" ? "row-warning" : "")">
+                        <td class="td-name">@task.Title</td>
+                        <td style="color:#718096; font-size:0.85rem;">@task.Description</td>
+                        <td style="font-size:0.85rem; color:@(task.DueDate < DateTime.Now && task.Status != "Completed" ? "#dc2626" : "#4a5568")">
+                            @task.DueDate.ToString("MMM dd, yyyy")
+                            @if (task.DueDate < DateTime.Now && task.Status != "Completed")
+                            {
+                                <span style="font-size:0.75rem; color:#dc2626;"> (Overdue)</span>
+                            }
+                        </td>
+                        <td>
+                            @if (task.Priority == "High")
+                            {
+                                <span class="status-badge" style="background:#fee2e2; color:#991b1b;">🔴 High</span>
+                            }
+                            else if (task.Priority == "Medium")
+                            {
+                                <span class="status-badge" style="background:#fef9c3; color:#854d0e;">🟡 Medium</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge" style="background:#dcfce7; color:#166534;">🟢 Low</span>
+                            }
+                        </td>
+                        <td>
+                            @if (task.Status == "Completed")
+                            {
+                                <span class="status-badge" style="background:#dcfce7; color:#166534;">✓ Completed</span>
+                            }
+                            else if (task.Status == "In Progress")
+                            {
+                                <span class="status-badge" style="background:#dbeafe; color:#1e40af;">⟳ In Progress</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge status-low">⏳ Pending</span>
+                            }
+                        </td>
+                        <td class="td-actions">
+                            @if (task.Status != "Completed")
+                            {
+                                <button class="btn-edit" @onclick="() => MarkComplete(task.Id)">✓ Done</button>
+                            }
+                            <button class="btn-edit" @onclick="() => StartEdit(task)" style="background:#6366f1; color:white; border:none;">Edit</button>
+                            <button class="btn-delete" @onclick="() => DeleteTask(task.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+                @if (!FilteredTasks.Any())
+                {
+                    <tr>
+                        <td colspan="6" class="empty-state">No tasks found. Add your first task!</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    List<ScheduledTask> tasks = new();
+    ScheduledTask formTask = new();
+    ScheduledTask? editingTask = null;
+    bool showForm = false;
+    string validationMessage = "";
+    string successMessage = "";
+    string statusFilter = "";
+    string priorityFilter = "";
+
+    List<ScheduledTask> FilteredTasks => tasks
+        .Where(t => string.IsNullOrEmpty(statusFilter) || t.Status == statusFilter)
+        .Where(t => string.IsNullOrEmpty(priorityFilter) || t.Priority == priorityFilter)
+        .OrderBy(t => t.DueDate)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+
+    async Task LoadTasks()
+    {
+        using var db = DbFactory.CreateDbContext();
+        tasks = await db.ScheduledTasks
+            .OrderBy(t => t.DueDate)
+            .ToListAsync();
+    }
+
+    void ShowForm()
+    {
+        editingTask = null;
+        formTask = new ScheduledTask
+        {
+            DueDate = DateTime.Now.AddDays(1),
+            Priority = "Medium",
+            Status = "Pending"
+        };
+        validationMessage = "";
+        showForm = true;
+    }
+
+    void StartEdit(ScheduledTask task)
+    {
+        editingTask = task;
+        formTask = new ScheduledTask
+        {
+            Id = task.Id,
+            Title = task.Title,
+            Description = task.Description,
+            DueDate = task.DueDate,
+            Priority = task.Priority,
+            Status = task.Status,
+            CreatedAt = task.CreatedAt
+        };
+        validationMessage = "";
+        showForm = true;
+    }
+
+    void CancelForm()
+    {
+        showForm = false;
+        editingTask = null;
+        formTask = new();
+        validationMessage = "";
+    }
+
+    async Task SaveTask()
+    {
+        if (string.IsNullOrWhiteSpace(formTask.Title))
+        {
+            validationMessage = "Task title is required.";
+            return;
+        }
+
+        using var db = DbFactory.CreateDbContext();
+        if (editingTask == null)
+            db.ScheduledTasks.Add(formTask);
+        else
+            db.ScheduledTasks.Update(formTask);
+
+        await db.SaveChangesAsync();
+        successMessage = "Task saved successfully!";
+        CancelForm();
+        await LoadTasks();
+    }
+
+    async Task MarkComplete(int id)
+    {
+        using var db = DbFactory.CreateDbContext();
+        var task = await db.ScheduledTasks.FindAsync(id);
+        if (task != null)
+        {
+            task.Status = "Completed";
+            await db.SaveChangesAsync();
+        }
+        successMessage = "Task marked as complete!";
+        await LoadTasks();
+    }
+
+    async Task DeleteTask(int id)
+    {
+        using var db = DbFactory.CreateDbContext();
+        var task = await db.ScheduledTasks.FindAsync(id);
+        if (task != null)
+        {
+            db.ScheduledTasks.Remove(task);
+            await db.SaveChangesAsync();
+        }
+        successMessage = "Task deleted.";
+        await LoadTasks();
+    }
+
+    void FilterChanged(ChangeEventArgs e)
+    {
+        statusFilter = e.Value?.ToString() ?? "";
+    }
+
+    void PriorityFilterChanged(ChangeEventArgs e)
+    {
+        priorityFilter = e.Value?.ToString() ?? "";
+    }
+}

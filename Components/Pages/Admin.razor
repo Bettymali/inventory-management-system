@@ -1,0 +1,118 @@
+﻿@page "/admin"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<IdentityUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+
+<div class="inventory-container">
+    <div class="inventory-header">
+        <div>
+            <h3 class="inventory-title">User Management</h3>
+            <p style="color:#718096; margin:0; font-size:0.9rem;">Manage users and assign roles</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div style="background:#f0fff4; border:1px solid #9ae6b4; color:#276749; padding:10px 14px; border-radius:8px; margin-bottom:1rem;">
+            @successMessage
+        </div>
+    }
+
+    <div class="table-card">
+        <table class="inventory-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Current Role</th>
+                    <th>Assign Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var user in users)
+                {
+                    <tr>
+                        <td class="td-name">@user.Email</td>
+                        <td>
+                            @if (userRoles.ContainsKey(user.Id) && userRoles[user.Id].Any())
+                            {
+                                foreach (var role in userRoles[user.Id])
+                                {
+                                    <span class="category-badge">@role</span>
+                                }
+                            }
+                            else
+                            {
+                                <span style="color:#a0aec0; font-style:italic;">No role</span>
+                            }
+                        </td>
+                        <td class="td-actions">
+                            <button class="btn-edit"
+                                    @onclick='() => AssignRole(user.Id, "Admin")'>
+                                Make Admin
+                            </button>
+                            <button class="btn-secondary" style="height:32px; padding:0 12px; font-size:13px;"
+                                    @onclick='() => AssignRole(user.Id, "Staff")'>
+                                Make Staff
+                            </button>
+                            <button class="btn-delete"
+                                    @onclick="() => RemoveRoles(user.Id)">
+                                Remove Roles
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    List<IdentityUser> users = new();
+    Dictionary<string, List<string>> userRoles = new();
+    string successMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    async Task LoadUsers()
+    {
+        users = UserManager.Users.ToList();
+        userRoles.Clear();
+        foreach (var user in users)
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            userRoles[user.Id] = roles.ToList();
+        }
+    }
+
+    async Task AssignRole(string userId, string role)
+    {
+        var user = await UserManager.FindByIdAsync(userId);
+        if (user == null) return;
+
+        var currentRoles = await UserManager.GetRolesAsync(user);
+        await UserManager.RemoveFromRolesAsync(user, currentRoles);
+        await UserManager.AddToRoleAsync(user, role);
+
+        successMessage = $"Role updated successfully!";
+        await LoadUsers();
+        StateHasChanged();
+    }
+
+    async Task RemoveRoles(string userId)
+    {
+        var user = await UserManager.FindByIdAsync(userId);
+        if (user == null) return;
+
+        var currentRoles = await UserManager.GetRolesAsync(user);
+        await UserManager.RemoveFromRolesAsync(user, currentRoles);
+
+        successMessage = "Roles removed successfully!";
+        await LoadUsers();
+        StateHasChanged();
+    }
+}

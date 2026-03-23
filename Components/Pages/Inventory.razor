@@ -1,0 +1,233 @@
+﻿@page "/inventory"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IJSRuntime JS
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div class="inventory-container">
+    <div class="inventory-header">
+        <div>
+            <h3 class="inventory-title">Inventory Management</h3>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-secondary" @onclick="ExportToCsv">Export CSV</button>
+            @if (isAdmin)
+            {
+                <button class="btn-primary" @onclick="ShowForm">+ Add Item</button>
+            }
+        </div>
+    </div>
+
+    @if (lowStockItems.Any())
+    {
+        <div class="alert-warning">
+            <strong>Low Stock Warning:</strong>
+            @foreach (var item in lowStockItems)
+            {
+                <span class="alert-item">@item.Name (@item.Quantity left)</span>
+            }
+        </div>
+    }
+
+    <div class="search-bar">
+        <input type="text" placeholder="Search by name or category..."
+               @bind="searchTerm" @bind:event="oninput" class="search-input" />
+    </div>
+
+    @if (showForm)
+    {
+        <div class="form-card">
+            <h5 class="form-title">@(editingItem == null ? "Add New Item" : "Edit Item")</h5>
+            @if (!string.IsNullOrEmpty(validationMessage))
+            {
+                <p class="validation-error">@validationMessage</p>
+            }
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input placeholder="e.g. T-Shirt" @bind="formItem.Name" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input placeholder="e.g. Clothing" @bind="formItem.Category" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" placeholder="0" @bind="formItem.Quantity" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Price ($)</label>
+                    <input type="number" placeholder="0.00" @bind="formItem.Price" class="form-input" />
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="SaveItem">Save Item</button>
+                <button class="btn-secondary" @onclick="CancelForm">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <div class="table-card">
+        <table class="inventory-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in FilteredItems)
+                {
+                    <tr class="@(item.Quantity < 5 ? "row-warning" : "")">
+                        <td class="td-name">@item.Name</td>
+                        <td><span class="category-badge">@item.Category</span></td>
+                        <td class="@(item.Quantity < 5 ? "qty-low" : "qty-ok")">@item.Quantity</td>
+                        <td class="td-price">$@item.Price.ToString("F2")</td>
+                        <td class="td-actions">
+                            @if (isAdmin)
+                            {
+                                <button class="btn-edit" @onclick="() => StartEdit(item)">Edit</button>
+                                <button class="btn-delete" @onclick="() => DeleteItem(item.Id)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if (!FilteredItems.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="empty-state">No items found.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    bool isAdmin = false;
+    List<InventoryItem> Items = new();
+    InventoryItem formItem = new();
+    InventoryItem? editingItem = null;
+    bool showForm = false;
+    string searchTerm = "";
+    string validationMessage = "";
+
+    List<InventoryItem> lowStockItems => Items.Where(i => i.Quantity < 5).ToList();
+
+    List<InventoryItem> FilteredItems => string.IsNullOrEmpty(searchTerm)
+        ? Items
+        : Items.Where(i =>
+            i.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            i.Category.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        isAdmin = authState.User.IsInRole("Admin");
+        await LoadItems();
+    }
+
+    async Task LoadItems()
+    {
+        using var db = DbFactory.CreateDbContext();
+        Items = await db.InventoryItems.ToListAsync();
+    }
+
+    void ShowForm()
+    {
+        editingItem = null;
+        formItem = new();
+        validationMessage = "";
+        showForm = true;
+    }
+
+    void StartEdit(InventoryItem item)
+    {
+        editingItem = item;
+        formItem = new InventoryItem
+        {
+            Id = item.Id,
+            Name = item.Name,
+            Category = item.Category,
+            Quantity = item.Quantity,
+            Price = item.Price
+        };
+        validationMessage = "";
+        showForm = true;
+    }
+
+    void CancelForm()
+    {
+        showForm = false;
+        editingItem = null;
+        formItem = new();
+        validationMessage = "";
+    }
+
+    async Task SaveItem()
+    {
+        if (string.IsNullOrWhiteSpace(formItem.Name))
+        {
+            validationMessage = "Name is required.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(formItem.Category))
+        {
+            validationMessage = "Category is required.";
+            return;
+        }
+        if (formItem.Quantity < 0)
+        {
+            validationMessage = "Quantity cannot be negative.";
+            return;
+        }
+        if (formItem.Price < 0)
+        {
+            validationMessage = "Price cannot be negative.";
+            return;
+        }
+
+        using var db = DbFactory.CreateDbContext();
+        if (editingItem == null)
+            db.InventoryItems.Add(formItem);
+        else
+            db.InventoryItems.Update(formItem);
+
+        await db.SaveChangesAsync();
+        CancelForm();
+        await LoadItems();
+    }
+
+    async Task DeleteItem(int id)
+    {
+        using var db = DbFactory.CreateDbContext();
+        var item = await db.InventoryItems.FindAsync(id);
+        if (item != null)
+        {
+            db.InventoryItems.Remove(item);
+            await db.SaveChangesAsync();
+        }
+        await LoadItems();
+    }
+
+    async Task ExportToCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Name,Category,Quantity,Price");
+        foreach (var item in Items)
+        {
+            sb.AppendLine($"{item.Name},{item.Category},{item.Quantity},{item.Price}");
+        }
+        var fileName = $"inventory_{DateTime.Now:yyyyMMdd}.csv";
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+        var base64 = Convert.ToBase64String(fileBytes);
+        await JS.InvokeVoidAsync("downloadFile", fileName, base64);
+    }
+}

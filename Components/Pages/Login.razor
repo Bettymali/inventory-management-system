@@ -1,0 +1,47 @@
+﻿@page "/login"
+@rendermode InteractiveServer
+
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2 class="auth-title">Welcome back</h2>
+            <p class="auth-subtitle">Sign in to your inventory system</p>
+        </div>
+
+        @if (showError)
+        {
+            <div class="auth-error">⚠ Invalid email or password.</div>
+        }
+
+        <form method="post" action="/account/login">
+            <input name="__RequestVerificationToken" type="hidden"
+                   value="@antiforgeryToken" />
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" class="form-input"
+                       placeholder="you@example.com" required />
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" class="form-input"
+                       placeholder="••••••" required />
+            </div>
+            <button type="submit" class="btn-primary auth-btn">Sign in</button>
+        </form>
+
+        <p class="auth-footer">
+            Don't have an account? <a href="/register">Register here</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? error { get; set; }
+    bool showError => error == "1";
+    string antiforgeryToken = "";
+
+    protected override void OnInitialized()
+    {
+        antiforgeryToken = "";
+    }
+}

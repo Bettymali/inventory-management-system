@@ -1,0 +1,140 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Navigation
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div>
+            <h2 class="dashboard-title">Dashboard</h2>
+            <p class="dashboard-subtitle">Welcome to your inventory system</p>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#e0e7ff"></div>
+            <div>
+                <div class="stat-label">Total Products</div>
+                <div class="stat-value">@totalProducts</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#dcfce7"></div>
+            <div>
+                <div class="stat-label">Total Stock Value</div>
+                <div class="stat-value">$@totalValue.ToString("F2")</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#fef9c3"></div>
+            <div>
+                <div class="stat-label">Low Stock Items</div>
+                <div class="stat-value" style="color:#d97706">@lowStockCount</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#fee2e2"></div>
+            <div>
+                <div class="stat-label">Out of Stock</div>
+                <div class="stat-value" style="color:#dc2626">@outOfStockCount</div>
+            </div>
+        </div>
+    </div>
+
+    @if (lowStockItems.Any())
+    {
+        <div class="dashboard-card">
+            <div class="dashboard-card-header">
+                <span class="dashboard-card-title">Items Needing Attention</span>
+                <a href="/inventory" class="dashboard-link">View all →</a>
+            </div>
+            <table class="inventory-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in lowStockItems)
+                    {
+                        <tr>
+                            <td class="td-name">@item.Name</td>
+                            <td><span class="category-badge">@item.Category</span></td>
+                            <td class="@(item.Quantity == 0 ? "qty-low" : "qty-low")">@item.Quantity</td>
+                            <td>
+                                @if (item.Quantity == 0)
+                                {
+                                    <span class="status-badge status-out">Out of stock</span>
+                                }
+                                else
+                                {
+                                    <span class="status-badge status-low">Low stock</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <span class="dashboard-card-title">Stock by Category</span>
+        </div>
+        <div class="category-list">
+            @foreach (var cat in categoryStats)
+            {
+                <div class="category-row">
+                    <span class="category-name">@cat.Key</span>
+                    <div class="category-bar-wrap">
+                        <div class="category-bar"
+                             style="width:@(Math.Min(cat.Value * 100 / (maxCategoryValue == 0 ? 1 : maxCategoryValue), 100))%">
+                        </div>
+                    </div>
+                    <span class="category-count">@cat.Value units</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="dashboard-actions">
+        <a href="/inventory" class="btn-primary" style="text-decoration:none; padding:12px 24px; border-radius:8px;">
+            + Add Inventory Item
+        </a>
+    </div>
+</div>
+
+@code {
+    int totalProducts = 0;
+    decimal totalValue = 0;
+    int lowStockCount = 0;
+    int outOfStockCount = 0;
+    List<InventoryItem> lowStockItems = new();
+    Dictionary<string, int> categoryStats = new();
+    int maxCategoryValue = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var db = DbFactory.CreateDbContext();
+        var items = await db.InventoryItems.ToListAsync();
+
+        totalProducts = items.Count;
+        totalValue = items.Sum(i => i.Price * i.Quantity);
+        lowStockCount = items.Count(i => i.Quantity < 5 && i.Quantity > 0);
+        outOfStockCount = items.Count(i => i.Quantity == 0);
+        lowStockItems = items.Where(i => i.Quantity < 5).ToList();
+
+        categoryStats = items
+            .GroupBy(i => i.Category)
+            .ToDictionary(g => g.Key, g => g.Sum(i => i.Quantity));
+
+        maxCategoryValue = categoryStats.Any() ? categoryStats.Values.Max() : 1;
+    }
+}
