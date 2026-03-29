@@ -29,8 +29,9 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/login";
     options.LogoutPath = "/account/logout";
 });
+
 var app = builder.Build();
-// Create roles when app starts//
+
 using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider
@@ -45,6 +46,7 @@ using (var scope = app.Services.CreateScope())
             await roleManager.CreateAsync(new IdentityRole(role));
     }
 }
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);

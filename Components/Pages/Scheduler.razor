@@ -17,7 +17,7 @@
 
     @if (!string.IsNullOrEmpty(successMessage))
     {
-        <div class="auth-success">✓ @successMessage</div>
+        <div class="auth-success">@successMessage</div>
     }
 
     <div style="display:flex; gap:12px; margin-bottom:1rem; flex-wrap:wrap;">
@@ -59,7 +59,7 @@
             <h5 class="form-title">@(editingTask == null ? "Add New Task" : "Edit Task")</h5>
             @if (!string.IsNullOrEmpty(validationMessage))
             {
-                <p class="validation-error">⚠ @validationMessage</p>
+                <p class="validation-error">@validationMessage</p>
             }
             <div class="form-grid">
                 <div class="form-group" style="grid-column: span 2;">
@@ -77,9 +77,9 @@
                 <div class="form-group">
                     <label>Priority</label>
                     <select @bind="formTask.Priority" class="form-input">
-                        <option value="High">🔴 High</option>
-                        <option value="Medium">🟡 Medium</option>
-                        <option value="Low">🟢 Low</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -126,35 +126,35 @@
                         <td>
                             @if (task.Priority == "High")
                             {
-                                <span class="status-badge" style="background:#fee2e2; color:#991b1b;">🔴 High</span>
+                                <span class="status-badge" style="background:#fee2e2; color:#991b1b;">High</span>
                             }
                             else if (task.Priority == "Medium")
                             {
-                                <span class="status-badge" style="background:#fef9c3; color:#854d0e;">🟡 Medium</span>
+                                <span class="status-badge" style="background:#fef9c3; color:#854d0e;">Medium</span>
                             }
                             else
                             {
-                                <span class="status-badge" style="background:#dcfce7; color:#166534;">🟢 Low</span>
+                                <span class="status-badge" style="background:#dcfce7; color:#166534;">Low</span>
                             }
                         </td>
                         <td>
                             @if (task.Status == "Completed")
                             {
-                                <span class="status-badge" style="background:#dcfce7; color:#166534;">✓ Completed</span>
+                                <span class="status-badge" style="background:#dcfce7; color:#166534;">Completed</span>
                             }
                             else if (task.Status == "In Progress")
                             {
-                                <span class="status-badge" style="background:#dbeafe; color:#1e40af;">⟳ In Progress</span>
+                                <span class="status-badge" style="background:#dbeafe; color:#1e40af;">In Progress</span>
                             }
                             else
                             {
-                                <span class="status-badge status-low">⏳ Pending</span>
+                                <span class="status-badge status-low">Pending</span>
                             }
                         </td>
                         <td class="td-actions">
                             @if (task.Status != "Completed")
                             {
-                                <button class="btn-edit" @onclick="() => MarkComplete(task.Id)">✓ Done</button>
+                                <button class="btn-edit" @onclick="() => MarkComplete(task.Id)">Done</button>
                             }
                             <button class="btn-edit" @onclick="() => StartEdit(task)" style="background:#6366f1; color:white; border:none;">Edit</button>
                             <button class="btn-delete" @onclick="() => DeleteTask(task.Id)">Delete</button>
