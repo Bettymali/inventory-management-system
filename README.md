@@ -85,7 +85,6 @@ The application simulates a real business environment by combining inventory man
 
 ## Screenshots
 
-![Register](register.png)
 ![Dashboard](dashboard.png)
 ![Admin](admin.png)
 ![Campaigns](campaigns.png)
